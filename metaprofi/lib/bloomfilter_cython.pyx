@@ -19,7 +19,7 @@ def check_kmer_exists(list input_files, uint32_t kmer_size):
     Used for filtering out the input sample files
 
     Args:
-      input_files: List of Fasta/Fastq nucleotide/aminoacid sequence(s) file path corresponding to the same sample id
+      input_files: List of Fasta/Fastq nucleotide/aminoacid/transcriptomics sequence(s) file path corresponding to the same sample id
       kmer_size: Size of the k-mer
 
     Returns: Boolean (k-mer exists or not)
@@ -64,7 +64,7 @@ def bloomfilter_cython(list input_files, dict config, cnp.npy_uint8[:, ::1] shar
     """Computes hash for every k-mer in ever sequence in the input file(s) and creates the indexed bloom filter
 
     Args:
-    input_files: List of Fasta/Fastq nucleotide/aminoacid sequence(s) file path corresponding to the same sample id
+    input_files: List of Fasta/Fastq nucleotide/aminoacid/transcriptomics sequence(s) file path corresponding to the same sample id
     config: Config dictionary
     shared_array: SharedArray (Boolean NumPy array)
     column_idx: Column index in the shared array to use as bloom filter for the given sample
@@ -94,7 +94,7 @@ def bloomfilter_cython(list input_files, dict config, cnp.npy_uint8[:, ::1] shar
         seeds[s] = s
 
     # Bloom filter
-    if sequence_type == "nucleotide":
+    if sequence_type in ["nucleotide", "transcriptomics"]:
         for input_file in input_files:
             file_reader = get_file_reader(input_file)
             for read_obj in file_reader(input_file, build_index=False):
@@ -272,7 +272,7 @@ def sequence_to_hash_cython(str seq, str seq_type, dict config):
 cdef char *canonical_kmer(char *kmer, int kmer_size, char *rev_comp):
     """To get canonical (lexicographically small) k-mer
     Args:
-      kmer: K-mer
+      kmer: K-mer (can be DNA or RNA)
       kmer_size: Size of the k-mer
       rev_comp: memory to hold the reverse complement of k-mer
 
@@ -281,9 +281,13 @@ cdef char *canonical_kmer(char *kmer, int kmer_size, char *rev_comp):
     NOTE:
       1) Creates reverse complement to the given k-mer
       2) Returns the canonical k-mer
-
+      3) Handles both DNA (T) and RNA (U) bases
     """
-    cdef char* basemap = [b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0',  b'T', b'\0', b'G', b'\0', b'\0', b'\0', b'C', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'N', b'\0', b'\0', b'\0', b'\0', b'\0', b'A', b'A', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b't', b'\0', b'g', b'\0', b'\0', b'\0', b'c', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'a',  b'a']
+    # Updated basemap to handle both T and U
+    # The index into the array represents the ASCII value of the input character
+    # The value at that index is the complementary base
+    # If you have base 'A' (ASCII 65), basemap[65] gives you 'T'
+    cdef char* basemap = [b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0',  b'T', b'U', b'G', b'\0', b'\0', b'\0', b'C', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'N', b'\0', b'\0', b'\0', b'\0', b'\0', b'A', b'A', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b't', b'u', b'g', b'\0', b'\0', b'\0', b'c', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'\0', b'a', b'a']
     cdef bint use_rev_comp = False
     cdef size_t end = kmer_size - 1
     cdef Py_ssize_t i
